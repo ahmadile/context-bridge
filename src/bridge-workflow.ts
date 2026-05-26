@@ -109,9 +109,13 @@ export async function applyBridgeResponse(
   return true;
 }
 
-export async function runBridgeImportFromExternal(): Promise<void> {
-  printBridgeDiagram();
-  console.log(chalk.yellow.bold('  📥  Importer la réponse de votre IA dans le projet\n'));
+export async function runBridgeImportFromExternal(options: {
+  showDiagram?: boolean;
+} = {}): Promise<void> {
+  if (options.showDiagram) {
+    printBridgeDiagram();
+  }
+  console.log(chalk.yellow.bold('  📥  Importer la réponse de votre IA\n'));
 
   const source = await select({
     message: 'Source de la réponse ?',

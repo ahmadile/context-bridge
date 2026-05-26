@@ -179,17 +179,15 @@ export async function runCompanionLoop(): Promise<void> {
     }
 
     if (action === 'export') {
-      const { runInteractiveExport } = await import('./interactive');
+      const { runInteractiveExport } = await import('./export-flow');
       await runInteractiveExport({ bridgeMode: true, skipBanner: true });
-      const files = (await import('./scanner')).scanDirectory(process.cwd(), process.cwd());
-      recordExport(files.length);
-      showInfo('Export enregistré dans la session. Collez le contenu dans votre IA externe.');
+      showInfo('Collez le contenu dans votre IA externe.');
       continue;
     }
 
     if (action === 'import') {
       const { runBridgeImportFromExternal } = await import('./bridge-workflow');
-      await runBridgeImportFromExternal();
+      await runBridgeImportFromExternal({ showDiagram: false });
       continue;
     }
   }

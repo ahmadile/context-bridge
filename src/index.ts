@@ -333,8 +333,12 @@ program
 
 // ─── MODE INTERACTIF (par défaut) ───────────────────────────────────
 
-if (process.argv.length <= 2) {
-    runInteractiveMode().catch(console.error);
+const userArgs = process.argv.slice(2).filter((a) => a.length > 0);
+if (userArgs.length === 0) {
+    runInteractiveMode().catch((err) => {
+        console.error(err);
+        process.exitCode = 1;
+    });
 } else {
     program.parse(process.argv);
 }
