@@ -32,10 +32,13 @@ export function showHelp(): void {
     console.log(chalk.gray('  ═══════════════════════════════════════════════════════'));
     console.log('');
 
-    console.log(chalk.white.bold('  🚀 MODE INTERACTIF (Débutants)'));
-    console.log(chalk.gray('  Lancez simplement la commande sans arguments :'));
-  console.log(chalk.green('    node dist/index.js'));
-    console.log(chalk.gray('  → Un menu visuel vous guidera étape par étape.'));
+    console.log(chalk.white.bold('  🌉 PONT IDE ↔ ChatGPT (usage principal)'));
+    console.log(chalk.gray('  1. Export : envoyer le code au navigateur'));
+    console.log(chalk.green('       node dist/index.js  → menu « IDE → ChatGPT »'));
+    console.log(chalk.gray('  2. Import : appliquer la réponse ChatGPT dans les fichiers'));
+    console.log(chalk.green('       node dist/index.js bridge --clipboard'));
+    console.log(chalk.gray('  3. Menu complet :'));
+    console.log(chalk.green('       node dist/index.js'));
     console.log('');
 
     // ── Export section

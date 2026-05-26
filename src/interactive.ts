@@ -8,349 +8,343 @@ import { countTokens } from './tokenCounter';
 import { formatContext, TargetModel, estimateCost, formatCostTable } from './formatter';
 import { extractSignatures, formatSignatures } from './ast-parser';
 import { buildDependencyGraph, formatDependencyGraph } from './dep-graph';
-import { parseAIResponse, generateDiff, applyCodeBlocks } from './importer';
 import clipboardy from 'clipboardy';
 import { showBanner, showStep, showSuccess, showInfo, showWarning, showTokenCount } from './ui';
+import {
+  printBridgeDiagram,
+  runBridgeImportFromChatGPT,
+  copyChatGPTInstructions,
+  CHATGPT_IMPORT_INSTRUCTION,
+} from './bridge-workflow';
+import {
+  segmentTranscript,
+  suggestBestSegmentIndex,
+  buildTranscriptFromSegment,
+} from './transcript-utils';
 
 /**
- * The interactive menu mode - guides the user step by step
+ * Tableau de bord interactif — menu principal
  */
 export async function runInteractiveMode(): Promise<void> {
-    showBanner();
-    console.log(chalk.blue(`  📁  Dossier de travail actif : ${chalk.bold(process.cwd())}`));
-    console.log(chalk.gray('  Bienvenue ! Ce menu va vous guider pas à pas.\n'));
+  showBanner();
+  console.log(chalk.blue(`  📁  Dossier de travail : ${chalk.bold(process.cwd())}\n`));
 
-    // Console quickstart tips
-    console.log(chalk.cyan('  🚀 Commencer immédiatement en ligne de commande :'));
-    console.log(chalk.gray(`     • ${chalk.bold('code-caricature export')}              - Exporter le contexte de votre code`));
-    console.log(chalk.gray(`     • ${chalk.bold('code-caricature import --clipboard')}  - Importer les corrections depuis le presse-papiers`));
-    console.log(chalk.gray(`     • ${chalk.bold('code-caricature attitude chat')}       - Lancer l'IA locale pour vous guider`));
-    console.log('');
+  printBridgeDiagram();
 
-    // Step 1: Choose main action
-    const mainAction = await select({
-        message: '🎯  Que voulez-vous faire aujourd\'hui ?',
-        choices: [
-            {
-                name: '📤  EXPORTER : Envoyer mon code à une IA',
-                value: 'export',
-                description: 'Préparer le contexte pour une IA Générale'
-            },
-            {
-                name: '📥  IMPORTER : Appliquer les corrections de l\'IA',
-                value: 'import',
-                description: 'Intégrer le code généré dans mes fichiers'
-            },
-            {
-                name: '🎓  MENTORAT : Lancer le tutoriel interactif',
-                value: 'tutoriel',
-                description: 'Suivre un tutoriel pas-à-pas guidé par l\'IA (Locale/OpenAI)'
-            },
-            {
-                name: '💬  DISCUSSION : Parler en direct avec l\'IA locale',
-                value: 'chat',
-                description: 'Discuter avec Qwen2.5-Coder sur votre projet'
-            },
-            {
-                name: '📖  Voir le guide d\'utilisation (Aide)',
-                value: 'help',
-            },
-        ],
-    });
+  const mainAction = await select({
+    message: '🎯  Tableau de bord — Que voulez-vous faire ?',
+    choices: [
+      {
+        name: '🌉  PONT ChatGPT → IDE : Appliquer la réponse dans mes fichiers',
+        value: 'bridge-import',
+        description: 'Vous avez copié la réponse ChatGPT → le CLI corrige vos fichiers',
+      },
+      {
+        name: '📤  PONT IDE → ChatGPT : Envoyer mon code au navigateur',
+        value: 'bridge-export',
+        description: 'Scanner le projet et coller le contexte dans ChatGPT',
+      },
+      {
+        name: '📋  Copier les instructions pour ChatGPT (format import)',
+        value: 'bridge-instructions',
+        description: 'Pour que ChatGPT renvoie des blocs avec chemins de fichiers',
+      },
+      {
+        name: '🔁  Boucle guidée complète (export → ChatGPT → import)',
+        value: 'bridge-loop',
+        description: 'Les 3 étapes du pont, une par une',
+      },
+      { name: '──────────────', value: 'sep', disabled: true },
+      {
+        name: '🎓  Tutoriel vidéo (transcription découpée)',
+        value: 'tutoriel',
+        description: 'Choisir la partie de la transcription par où commencer',
+      },
+      {
+        name: '💬  Discussion IA dans le terminal',
+        value: 'chat',
+        description: 'Questions courtes / secours si ChatGPT est indisponible',
+      },
+      {
+        name: '🩺  Diagnostic (MCP, build, modèles)',
+        value: 'doctor',
+      },
+      {
+        name: '📖  Aide détaillée',
+        value: 'help',
+      },
+    ],
+  });
 
-    if (mainAction === 'help') {
-        const { showHelp } = await import('./ui');
-        showHelp();
-        return;
+  switch (mainAction) {
+    case 'bridge-import':
+      await runBridgeImportFromChatGPT();
+      return;
+    case 'bridge-export':
+      await runInteractiveExport({ bridgeMode: true });
+      return;
+    case 'bridge-instructions':
+      copyChatGPTInstructions();
+      return;
+    case 'bridge-loop':
+      await runBridgeFullLoop();
+      return;
+    case 'tutoriel':
+      await runInteractiveTutoriel();
+      return;
+    case 'chat': {
+      const { runLocalChatMode } = await import('./attitudes/chat-local');
+      await runLocalChatMode();
+      return;
     }
-
-    if (mainAction === 'import') {
-        await runInteractiveImport();
-        return;
+    case 'doctor': {
+      const { runDoctor } = await import('./doctor');
+      await runDoctor();
+      return;
     }
-
-    if (mainAction === 'chat') {
-        const { runLocalChatMode } = await import('./attitudes/chat-local');
-        await runLocalChatMode();
-        return;
+    case 'help': {
+      const { showHelp } = await import('./ui');
+      showHelp();
+      return;
     }
-
-    if (mainAction === 'tutoriel') {
-        const source = await select({
-            message: '📄  D\'où vient la transcription du tutoriel ?',
-            choices: [
-                { name: '📋  Depuis le presse-papiers (Ctrl+C sur YouTube/texte d\'abord)', value: 'clipboard' },
-                { name: '📁  Depuis un fichier local', value: 'file' },
-            ]
-        });
-
-        let resolvedPath = '';
-        let isTemp = false;
-
-        if (source === 'clipboard') {
-            try {
-                const text = clipboardy.readSync();
-                if (!text.trim()) {
-                    showWarning('Le presse-papiers est vide ou invalide.');
-                    return;
-                }
-                resolvedPath = path.resolve(process.cwd(), '.temp-transcript.txt');
-                fs.writeFileSync(resolvedPath, text, 'utf8');
-                isTemp = true;
-                showStep('📋', 'Transcription lue avec succès depuis le presse-papiers.');
-            } catch (e) {
-                showWarning('Impossible de lire le presse-papiers.');
-                return;
-            }
-        } else {
-            const transcriptPathInput = await input({
-                message: '📄  Chemin du fichier (ex: transcript.txt) :',
-                validate: (value) => {
-                    if (!value.trim()) return 'Le chemin ne peut pas être vide.';
-                    const fullPath = path.resolve(process.cwd(), value.trim());
-                    if (!fs.existsSync(fullPath)) {
-                        return `Fichier introuvable : ${fullPath}`;
-                    }
-                    return true;
-                }
-            });
-            resolvedPath = path.resolve(process.cwd(), transcriptPathInput.trim());
-        }
-
-        const { runTutorielAttitude } = await import('./attitudes/tutoriel');
-        await runTutorielAttitude(resolvedPath);
-
-        if (isTemp && fs.existsSync(resolvedPath)) {
-            try {
-                fs.unlinkSync(resolvedPath);
-            } catch (e) {}
-        }
-        return;
-    }
-
-    // --- EXPORT FLOW ---
-    
-    const exportMode = await select({
-        message: '⚙️  Quel type d\'export voulez-vous ?',
-        choices: [
-            { name: '📋  Complet (Scan standard)', value: 'full' },
-            { name: '🏗️  Architecture (Seulement la structure, léger)', value: 'architecture' },
-            { name: '🔍  Filtré (Certaines extensions ou récents)', value: 'filter' },
-        ],
-    });
-
-    let includeExts: string[] = [];
-    let sinceMs: number | undefined;
-
-    if (exportMode === 'filter') {
-        const filterType = await select({
-            message: 'Comment voulez-vous filtrer ?',
-            choices: [
-                { name: 'Par extensions (ex: .ts, .js)', value: 'ext' },
-                { name: 'Par date (modifiés récemment)', value: 'date' },
-            ]
-        });
-
-        if (filterType === 'ext') {
-            const extsInput = await input({
-                message: '📝  Quelles extensions ? (séparées par des virgules)',
-                default: '.ts,.js',
-            });
-            includeExts = extsInput.split(',').map(e => e.trim());
-        } else {
-            const hoursInput = await input({
-                message: '🕐  Depuis combien d\'heures ?',
-                default: '24',
-            });
-            sinceMs = Date.now() - (parseFloat(hoursInput) * 60 * 60 * 1000);
-        }
-    }
-
-    // Step 3: Focus file?
-    const wantFocus = await confirm({
-        message: '🔥  Voulez-vous mettre un fichier spécifique en évidence (Focus) ?',
-        default: false,
-    });
-
-    let focusFiles: string[] = [];
-    if (wantFocus) {
-        const targetDir = process.cwd();
-        const allFiles = scanDirectory(targetDir, targetDir, undefined, {});
-        
-        if (allFiles.length > 0) {
-            const selected = await checkbox({
-                message: '📂  Sélectionnez le(s) fichier(s) à cibler :',
-                choices: allFiles.slice(0, 30).map(f => ({ name: f, value: f })),
-            });
-            focusFiles = selected;
-        }
-    }
-
-    // Optional advanced features
-    const wantGraph = await confirm({
-        message: '🔗  Inclure le graphe de dépendances (fichiers liés) ?',
-        default: false,
-    });
-
-    const wantIssue = await confirm({
-        message: '❓  Voulez-vous ajouter une question pour l\'IA ?',
-        default: false,
-    });
-
-    let issue: string | undefined;
-    if (wantIssue) {
-        issue = await input({
-            message: '💬  Votre problème ou question :',
-        });
-    }
-
-    const targetModel = await select({
-        message: '🤖  Quel format d\'export voulez-vous utiliser ?',
-        choices: [
-            { name: '🟢  Format Markdown standard (ChatGPT, Gemini, Qwen, etc.)', value: 'gpt' as TargetModel },
-            { name: '🟣  Format XML structuré (Claude, etc.)', value: 'claude' as TargetModel },
-        ],
-    });
-
-    const outputMode = await select({
-        message: '📤  Comment récupérer le résultat ?',
-        choices: [
-            { name: '📋  Presse-papiers (Ctrl+V ensuite)', value: 'clipboard' },
-            { name: '📁  Fichier texte (Glisser-déposer)', value: 'file' },
-        ],
-    });
-
-    // Execute Export
-    console.log('\n' + chalk.gray('  ─────────────────────────────────────────────────────────'));
-    const targetDir = process.cwd();
-    showStep('🔍', `Scan : ${targetDir}`);
-
-    const files = scanDirectory(targetDir, targetDir, undefined, { includeExts, sinceMs });
-    showStep('📁', `${files.length} fichiers trouvés`);
-
-    const { contents, securityReport } = readFilesContent(targetDir, files, true);
-
-    if (securityReport.length > 0) {
-        showStep('🔒', `Sécurité : ${securityReport.length} élément(s) masqué(s)`);
-    }
-
-    const tree = generateTree(files);
-    
-    let architectureContents: { [key: string]: string } | undefined;
-    if (exportMode === 'architecture') {
-        showStep('🏗️', 'Extraction de l\'architecture...');
-        architectureContents = {};
-        for (const [filePath, content] of Object.entries(contents)) {
-            if (!content.startsWith('//')) {
-                const sigs = extractSignatures(content, filePath);
-                architectureContents[filePath] = formatSignatures(sigs, filePath);
-            }
-        }
-    }
-
-    let depGraphText: string | undefined;
-    if (wantGraph) {
-        showStep('🔗', 'Analyse des dépendances...');
-        const graph = buildDependencyGraph(targetDir, files, contents);
-        depGraphText = formatDependencyGraph(graph, focusFiles[0]);
-    }
-
-    showStep('🎨', 'Création de la caricature...');
-
-    const formatted = formatContext({
-        tree,
-        contents,
-        target: targetModel,
-        issue,
-        focus: focusFiles,
-        architectureMode: exportMode === 'architecture',
-        architectureContents,
-        dependencyGraph: depGraphText,
-    });
-
-    const tokens = countTokens(formatted);
-    showTokenCount(tokens);
-    
-    const costs = estimateCost(tokens);
-    console.log(formatCostTable(costs));
-
-    if (outputMode === 'file') {
-        const outPath = path.resolve(targetDir, 'code-caricature.txt');
-        fs.writeFileSync(outPath, formatted, 'utf8');
-        showSuccess(`Fichier créé : ${outPath}`);
-    } else {
-        try {
-            clipboardy.writeSync(formatted);
-            showSuccess('Copié dans le presse-papiers !');
-        } catch (e) {
-            const outPath = path.resolve(targetDir, 'code-caricature.txt');
-            fs.writeFileSync(outPath, formatted, 'utf8');
-            showWarning('Presse-papiers inaccessible. Fichier de secours créé.');
-        }
-    }
-    console.log(chalk.gray('  ─────────────────────────────────────────────────────────\n'));
+    default:
+      return;
+  }
 }
 
-/**
- * Interactive flow for importing AI code
- */
-async function runInteractiveImport(): Promise<void> {
-    const source = await select({
-        message: '📥  D\'où vient le code de l\'IA ?',
-        choices: [
-            { name: '📋  Je viens de le copier (Presse-papiers)', value: 'clipboard' },
-            { name: '📄  Il est dans un fichier', value: 'file' },
-        ],
-    });
+/** Boucle complète pont IDE ↔ ChatGPT */
+async function runBridgeFullLoop(): Promise<void> {
+  printBridgeDiagram();
+  console.log(chalk.cyan.bold('  🔁  Boucle guidée en 3 temps\n'));
 
-    let responseText = '';
+  showStep('1/3', 'Export du contexte vers ChatGPT…');
+  await runInteractiveExport({ bridgeMode: true, skipBanner: true });
+
+  console.log(chalk.yellow('\n  ⏸  Pause : allez dans ChatGPT (navigateur).'));
+  console.log(chalk.gray('     • Collez le contexte (Ctrl+V)'));
+  console.log(chalk.gray('     • Décrivez votre bug ou votre design'));
+  console.log(chalk.gray('     • Copiez toute la réponse (Ctrl+C)\n'));
+
+  const ready = await confirm({
+    message: 'Avez-vous copié la réponse de ChatGPT dans le presse-papiers ?',
+    default: false,
+  });
+
+  if (!ready) {
+    showInfo('Revenez ici quand la réponse est copiée : menu « Pont ChatGPT → IDE ».');
+    return;
+  }
+
+  showStep('3/3', 'Import de la réponse dans votre projet…');
+  await runBridgeImportFromChatGPT();
+}
+
+/** Export interactif (option pont ChatGPT) */
+async function runInteractiveExport(options: {
+  bridgeMode?: boolean;
+  skipBanner?: boolean;
+} = {}): Promise<void> {
+  if (!options.skipBanner && options.bridgeMode) {
+    console.log(chalk.cyan.bold('\n  📤  Étape 1 — Envoyer votre projet à ChatGPT\n'));
+  }
+
+  const addInstructions = options.bridgeMode
+    ? await confirm({
+        message: 'Inclure la question + les instructions de format pour ChatGPT ?',
+        default: true,
+      })
+    : false;
+
+  let issue: string | undefined;
+  if (addInstructions) {
+    issue = await input({
+      message: '💬  Votre question pour ChatGPT (bug, design, etc.) :',
+      default: 'Analyse ce projet et propose les corrections nécessaires.',
+    });
+    issue =
+      issue +
+      '\n\n---\n' +
+      CHATGPT_IMPORT_INSTRUCTION;
+  }
+
+  const exportMode = await select({
+    message: 'Type d\'export :',
+    choices: [
+      { name: '🏗️  Architecture (léger, recommandé pour ChatGPT)', value: 'architecture' },
+      { name: '📋  Complet', value: 'full' },
+      { name: '🔍  Fichiers récents ou extensions', value: 'filter' },
+    ],
+  });
+
+  let includeExts: string[] = [];
+  let sinceMs: number | undefined;
+
+  if (exportMode === 'filter') {
+    const filterType = await select({
+      message: 'Filtrer comment ?',
+      choices: [
+        { name: 'Extensions (.ts, .js…)', value: 'ext' },
+        { name: 'Modifiés récemment', value: 'date' },
+      ],
+    });
+    if (filterType === 'ext') {
+      const extsInput = await input({ message: 'Extensions :', default: '.ts,.tsx,.js' });
+      includeExts = extsInput.split(',').map((e) => e.trim());
+    } else {
+      const hoursInput = await input({ message: 'Depuis combien d\'heures ?', default: '48' });
+      sinceMs = Date.now() - parseFloat(hoursInput) * 60 * 60 * 1000;
+    }
+  }
+
+  const wantFocus = await confirm({
+    message: 'Mettre un fichier en évidence (ex. fichier avec l\'erreur) ?',
+    default: false,
+  });
+
+  let focusFiles: string[] = [];
+  if (wantFocus) {
     const targetDir = process.cwd();
-
-    if (source === 'clipboard') {
-        try {
-            responseText = clipboardy.readSync();
-            showStep('📋', 'Lecture depuis le presse-papiers...');
-        } catch (e) {
-            showWarning('Impossible de lire le presse-papiers.');
-            return;
-        }
-    } else {
-        const filePath = await input({ message: 'Chemin du fichier (ex: reponse.txt) :' });
-        try {
-            responseText = fs.readFileSync(path.resolve(targetDir, filePath), 'utf8');
-            showStep('📄', 'Lecture du fichier...');
-        } catch (e) {
-            showWarning('Fichier introuvable ou illisible.');
-            return;
-        }
+    const allFiles = scanDirectory(targetDir, targetDir, undefined, {});
+    if (allFiles.length > 0) {
+      focusFiles = await checkbox({
+        message: 'Fichier(s) focus :',
+        choices: allFiles.slice(0, 40).map((f) => ({ name: f, value: f })),
+      });
     }
+  }
 
-    const blocks = parseAIResponse(responseText);
-    
-    if (blocks.length === 0) {
-        showWarning('Aucun bloc de code avec chemin reconnu n\'a été trouvé.');
+  const targetDir = process.cwd();
+  showStep('🔍', `Scan : ${targetDir}`);
+  const files = scanDirectory(targetDir, targetDir, undefined, { includeExts, sinceMs });
+  showStep('📁', `${files.length} fichiers`);
+
+  const { contents, securityReport } = readFilesContent(targetDir, files, true);
+  if (securityReport.length > 0) {
+    showStep('🔒', `${securityReport.length} élément(s) masqué(s)`);
+  }
+
+  const tree = generateTree(files);
+  let architectureContents: { [key: string]: string } | undefined;
+  if (exportMode === 'architecture') {
+    architectureContents = {};
+    for (const [filePath, content] of Object.entries(contents)) {
+      if (!content.startsWith('//')) {
+        architectureContents[filePath] = formatSignatures(
+          extractSignatures(content, filePath),
+          filePath
+        );
+      }
+    }
+  }
+
+  const formatted = formatContext({
+    tree,
+    contents,
+    target: 'gpt',
+    issue,
+    focus: focusFiles,
+    architectureMode: exportMode === 'architecture',
+    architectureContents,
+  });
+
+  const tokens = countTokens(formatted);
+  showTokenCount(tokens);
+
+  try {
+    clipboardy.writeSync(formatted);
+    showSuccess('Contexte copié dans le presse-papiers !');
+  } catch {
+    const outPath = path.resolve(targetDir, 'code-caricature.txt');
+    fs.writeFileSync(outPath, formatted, 'utf8');
+    showSuccess(`Fichier créé : ${outPath}`);
+  }
+
+  if (options.bridgeMode) {
+    console.log(chalk.cyan('\n  ▶  Prochaine étape : ouvrez ChatGPT et collez (Ctrl+V).'));
+    console.log(chalk.gray('     Puis revenez ici : « Pont ChatGPT → IDE ».\n'));
+  }
+}
+
+/** Tutoriel avec découpage intelligent de la transcription */
+async function runInteractiveTutoriel(): Promise<void> {
+  const source = await select({
+    message: 'Transcription du tutoriel :',
+    choices: [
+      { name: '📋  Presse-papiers', value: 'clipboard' },
+      { name: '📁  Fichier local', value: 'file' },
+    ],
+  });
+
+  let transcript = '';
+  let tempPath = '';
+  let isTemp = false;
+
+  if (source === 'clipboard') {
+    try {
+      transcript = clipboardy.readSync();
+      if (!transcript.trim()) {
+        showWarning('Presse-papiers vide.');
         return;
+      }
+    } catch {
+      showWarning('Impossible de lire le presse-papiers.');
+      return;
     }
-
-    showSuccess(`${blocks.length} fichier(s) détecté(s) dans la réponse.`);
-    
-    for (const block of blocks) {
-        const fullPath = path.resolve(targetDir, block.filePath);
-        const oldContent = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf8') : '';
-        console.log(generateDiff(oldContent, block.content, block.filePath));
+  } else {
+    const p = await input({ message: 'Chemin du fichier :', default: 'transcript.txt' });
+    const full = path.resolve(process.cwd(), p.trim());
+    if (!fs.existsSync(full)) {
+      showWarning('Fichier introuvable.');
+      return;
     }
+    transcript = fs.readFileSync(full, 'utf8');
+  }
 
-    const apply = await confirm({
-        message: '⚠️  Voulez-vous appliquer ces modifications à votre projet ?',
-        default: false,
+  showStep('📄', `Transcription : ${transcript.length.toLocaleString()} caractères`);
+
+  const segments = segmentTranscript(transcript);
+  let workingTranscript = transcript;
+
+  if (segments.length > 1) {
+    console.log(chalk.cyan(`\n  ✂️  Découpage en ${segments.length} partie(s) — choisissez par où commencer :\n`));
+    const suggested = suggestBestSegmentIndex(segments);
+    const pickMode = await select({
+      message: 'Comment démarrer le tutoriel ?',
+      choices: [
+        {
+          name: `🤖  Recommandé : partie ${suggested + 1} (la plus « actionnable »)`,
+          value: 'auto',
+        },
+        { name: '📑  Choisir moi-même une partie', value: 'manual' },
+        { name: '📜  Tout envoyer (risque de dépassement si IA locale)', value: 'full' },
+      ],
     });
 
-    if (apply) {
-        const result = applyCodeBlocks(targetDir, blocks);
-        if (result.applied.length > 0) showSuccess(`${result.applied.length} fichier(s) mis à jour.`);
-        if (result.created.length > 0) showSuccess(`${result.created.length} fichier(s) créé(s).`);
-        if (result.errors.length > 0) showWarning(`${result.errors.length} erreur(s) rencontrée(s).`);
-    } else {
-        showInfo('Import annulé. Aucune modification n\'a été faite.');
+    if (pickMode === 'auto') {
+      workingTranscript = buildTranscriptFromSegment(segments, suggested);
+      showInfo(`Démarrage à la partie ${suggested + 1} : « ${segments[suggested].title} »`);
+    } else if (pickMode === 'manual') {
+      const chosen = await select({
+        message: 'Partie de la transcription :',
+        choices: segments.map((s) => ({
+          name: `[${s.index + 1}/${segments.length}] ${s.title} (${s.charCount.toLocaleString()} car.)`,
+          value: s.index,
+        })),
+      });
+      workingTranscript = buildTranscriptFromSegment(segments, chosen);
     }
+  }
+
+  tempPath = path.resolve(process.cwd(), '.temp-transcript-segment.txt');
+  fs.writeFileSync(tempPath, workingTranscript, 'utf8');
+  isTemp = true;
+
+  const { runTutorielAttitude } = await import('./attitudes/tutoriel');
+  await runTutorielAttitude(tempPath);
+
+  if (isTemp && fs.existsSync(tempPath)) {
+    try {
+      fs.unlinkSync(tempPath);
+    } catch {}
+  }
 }

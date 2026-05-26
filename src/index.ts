@@ -284,6 +284,36 @@ program
     });
 
 program
+    .command('bridge')
+    .description('Pont IDE ↔ ChatGPT : appliquer la réponse IA dans vos fichiers')
+    .option('-c, --clipboard', 'Lire la réponse depuis le presse-papiers (défaut)')
+    .option('-f, --file <file>', 'Lire la réponse depuis un fichier')
+    .option('--dry-run', 'Prévisualiser sans modifier les fichiers')
+    .action(async (options) => {
+        showBanner();
+        const { printBridgeDiagram, applyBridgeResponse } = await import('./bridge-workflow');
+        printBridgeDiagram();
+        const targetDir = process.cwd();
+        let text = '';
+        if (options.file) {
+            const fp = path.resolve(targetDir, options.file);
+            if (!fs.existsSync(fp)) {
+                showWarning(`Fichier introuvable : ${fp}`);
+                return;
+            }
+            text = fs.readFileSync(fp, 'utf8');
+        } else {
+            try {
+                text = clipboardy.readSync();
+            } catch {
+                showWarning('Utilisez --clipboard ou --file reponse.txt');
+                return;
+            }
+        }
+        await applyBridgeResponse(text, { dryRun: !!options.dryRun });
+    });
+
+program
     .command('doctor')
     .description('Diagnostiquer le CLI (build, MCP, IA locale/cloud)')
     .action(async () => {

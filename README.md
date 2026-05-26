@@ -51,6 +51,17 @@ Le diagnostic teste notamment le **serveur MCP** (3 outils) et l'état des IA (O
 
 ---
 
+## 🌉 Usage principal : ChatGPT (navigateur) ↔ votre IDE
+
+C'est le cœur du CLI : **éviter le copier-coller fichier par fichier**.
+
+1. **IDE → ChatGPT** : `node dist/index.js` → *« Pont IDE → ChatGPT »* (ou `export`) — le contexte du projet est copié ; collez-le dans ChatGPT.
+2. **ChatGPT → IDE** : copiez la réponse de ChatGPT, puis *« Pont ChatGPT → IDE »* (ou `bridge --clipboard`) — le CLI **écrit directement** dans vos fichiers.
+
+Astuce : menu *« Copier les instructions pour ChatGPT »* pour que ChatGPT renvoie des blocs avec chemins (` ```ts src/fichier.ts `).
+
+---
+
 ## 🔌 Architecture : qui parle à qui ?
 
 ```
