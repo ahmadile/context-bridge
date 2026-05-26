@@ -12,10 +12,11 @@ import clipboardy from 'clipboardy';
 import { showBanner, showStep, showSuccess, showInfo, showWarning, showTokenCount } from './ui';
 import {
   printBridgeDiagram,
-  runBridgeImportFromChatGPT,
-  copyChatGPTInstructions,
-  CHATGPT_IMPORT_INSTRUCTION,
+  runBridgeImportFromExternal,
+  copyExternalAiInstructions,
+  EXTERNAL_AI_IMPORT_INSTRUCTION,
 } from './bridge-workflow';
+import { runCompanionLoop, recordExport } from './companion-session';
 import {
   segmentTranscript,
   suggestBestSegmentIndex,
@@ -35,24 +36,27 @@ export async function runInteractiveMode(): Promise<void> {
     message: '🎯  Tableau de bord — Que voulez-vous faire ?',
     choices: [
       {
-        name: '🌉  PONT ChatGPT → IDE : Appliquer la réponse dans mes fichiers',
+        name: '🤝  Session liée (compagnon export/import)',
+        value: 'companion',
+        description: 'Accompagne votre discussion IA : vérifie, alerte, bilan',
+      },
+      {
+        name: '📥  Pont IA → IDE : appliquer la réponse dans les fichiers',
         value: 'bridge-import',
-        description: 'Vous avez copié la réponse ChatGPT → le CLI corrige vos fichiers',
+        description: 'Copiez la réponse de votre IA → le CLI met à jour le projet',
       },
       {
-        name: '📤  PONT IDE → ChatGPT : Envoyer mon code au navigateur',
+        name: '📤  Pont IDE → IA : envoyer le code (export)',
         value: 'bridge-export',
-        description: 'Scanner le projet et coller le contexte dans ChatGPT',
+        description: 'Contexte du projet vers presse-papiers / fichier',
       },
       {
-        name: '📋  Copier les instructions pour ChatGPT (format import)',
+        name: '📋  Instructions format import (pour votre IA)',
         value: 'bridge-instructions',
-        description: 'Pour que ChatGPT renvoie des blocs avec chemins de fichiers',
       },
       {
-        name: '🔁  Boucle guidée complète (export → ChatGPT → import)',
+        name: '🔁  Boucle guidée (export → IA → import)',
         value: 'bridge-loop',
-        description: 'Les 3 étapes du pont, une par une',
       },
       { name: '──────────────', value: 'sep', disabled: true },
       {
@@ -63,7 +67,7 @@ export async function runInteractiveMode(): Promise<void> {
       {
         name: '💬  Discussion IA dans le terminal',
         value: 'chat',
-        description: 'Questions courtes / secours si ChatGPT est indisponible',
+        description: 'Questions courtes, aide code, secours hors-ligne',
       },
       {
         name: '🩺  Diagnostic (MCP, build, modèles)',
@@ -77,14 +81,17 @@ export async function runInteractiveMode(): Promise<void> {
   });
 
   switch (mainAction) {
+    case 'companion':
+      await runCompanionLoop();
+      return;
     case 'bridge-import':
-      await runBridgeImportFromChatGPT();
+      await runBridgeImportFromExternal();
       return;
     case 'bridge-export':
       await runInteractiveExport({ bridgeMode: true });
       return;
     case 'bridge-instructions':
-      copyChatGPTInstructions();
+      copyExternalAiInstructions();
       return;
     case 'bridge-loop':
       await runBridgeFullLoop();
@@ -117,40 +124,39 @@ async function runBridgeFullLoop(): Promise<void> {
   printBridgeDiagram();
   console.log(chalk.cyan.bold('  🔁  Boucle guidée en 3 temps\n'));
 
-  showStep('1/3', 'Export du contexte vers ChatGPT…');
+  showStep('1/3', 'Export du contexte vers votre IA…');
   await runInteractiveExport({ bridgeMode: true, skipBanner: true });
 
-  console.log(chalk.yellow('\n  ⏸  Pause : allez dans ChatGPT (navigateur).'));
-  console.log(chalk.gray('     • Collez le contexte (Ctrl+V)'));
-  console.log(chalk.gray('     • Décrivez votre bug ou votre design'));
+  console.log(chalk.yellow('\n  ⏸  Pause : collez dans votre IA (navigateur ou app).'));
+  console.log(chalk.gray('     • Ctrl+V le contexte, posez votre question'));
   console.log(chalk.gray('     • Copiez toute la réponse (Ctrl+C)\n'));
 
   const ready = await confirm({
-    message: 'Avez-vous copié la réponse de ChatGPT dans le presse-papiers ?',
+    message: 'Avez-vous copié la réponse de votre IA ?',
     default: false,
   });
 
   if (!ready) {
-    showInfo('Revenez ici quand la réponse est copiée : menu « Pont ChatGPT → IDE ».');
+    showInfo('Revenez via « Pont IA → IDE » ou « Session liée ».');
     return;
   }
 
-  showStep('3/3', 'Import de la réponse dans votre projet…');
-  await runBridgeImportFromChatGPT();
+  showStep('3/3', 'Import dans le projet…');
+  await runBridgeImportFromExternal();
 }
 
-/** Export interactif (option pont ChatGPT) */
-async function runInteractiveExport(options: {
+/** Export interactif */
+export async function runInteractiveExport(options: {
   bridgeMode?: boolean;
   skipBanner?: boolean;
 } = {}): Promise<void> {
   if (!options.skipBanner && options.bridgeMode) {
-    console.log(chalk.cyan.bold('\n  📤  Étape 1 — Envoyer votre projet à ChatGPT\n'));
+    console.log(chalk.cyan.bold('\n  📤  Étape 1 — Envoyer votre projet à votre IA\n'));
   }
 
   const addInstructions = options.bridgeMode
     ? await confirm({
-        message: 'Inclure la question + les instructions de format pour ChatGPT ?',
+        message: 'Inclure votre question + le format d\'import pour l\'IA ?',
         default: true,
       })
     : false;
@@ -158,19 +164,16 @@ async function runInteractiveExport(options: {
   let issue: string | undefined;
   if (addInstructions) {
     issue = await input({
-      message: '💬  Votre question pour ChatGPT (bug, design, etc.) :',
+      message: '💬  Votre question (bug, design, etc.) :',
       default: 'Analyse ce projet et propose les corrections nécessaires.',
     });
-    issue =
-      issue +
-      '\n\n---\n' +
-      CHATGPT_IMPORT_INSTRUCTION;
+    issue = issue + '\n\n---\n' + EXTERNAL_AI_IMPORT_INSTRUCTION;
   }
 
   const exportMode = await select({
     message: 'Type d\'export :',
     choices: [
-      { name: '🏗️  Architecture (léger, recommandé pour ChatGPT)', value: 'architecture' },
+      { name: '🏗️  Architecture (léger, recommandé)', value: 'architecture' },
       { name: '📋  Complet', value: 'full' },
       { name: '🔍  Fichiers récents ou extensions', value: 'filter' },
     ],
@@ -260,8 +263,8 @@ async function runInteractiveExport(options: {
   }
 
   if (options.bridgeMode) {
-    console.log(chalk.cyan('\n  ▶  Prochaine étape : ouvrez ChatGPT et collez (Ctrl+V).'));
-    console.log(chalk.gray('     Puis revenez ici : « Pont ChatGPT → IDE ».\n'));
+    recordExport(files.length);
+    console.log(chalk.cyan('\n  ▶  Collez dans votre IA (Ctrl+V), puis revenez pour l\'import.\n'));
   }
 }
 

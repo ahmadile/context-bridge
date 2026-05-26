@@ -1,6 +1,6 @@
 /**
- * Pont IDE ↔ IA externe (ChatGPT, Claude, Gemini dans le navigateur).
- * Workflow : export contexte → discussion navigateur → import réponse → fichiers locaux.
+ * Pont IDE ↔ IA externe (navigateur ou autre client).
+ * Export/import de fichiers : sans IA. L'IA du CLI intervient ailleurs (compagnon, chat).
  */
 import chalk from 'chalk';
 import { select, confirm, input } from '@inquirer/prompts';
@@ -9,9 +9,10 @@ import fs from 'fs';
 import path from 'path';
 import { showStep, showSuccess, showInfo, showWarning } from './ui';
 import { parseAIResponse, generateDiff, applyCodeBlocks } from './importer';
+import { validateImportPreview, recordImport, loadLinkedSession } from './companion-session';
 
-/** Instructions à coller dans ChatGPT pour obtenir des réponses importables. */
-export const CHATGPT_IMPORT_INSTRUCTION = `Quand tu proposes du code à appliquer dans mon projet, utilise TOUJOURS ce format pour chaque fichier :
+/** Instructions à coller dans votre IA externe pour des réponses importables. */
+export const EXTERNAL_AI_IMPORT_INSTRUCTION = `Quand tu proposes du code à appliquer dans mon projet, utilise TOUJOURS ce format pour chaque fichier :
 
 \`\`\`typescript chemin/relatif/vers/fichier.ts
 // contenu complet du fichier ou du correctif
@@ -20,45 +21,50 @@ export const CHATGPT_IMPORT_INSTRUCTION = `Quand tu proposes du code à applique
 Remplace "typescript" par le langage réel et mets le chemin relatif depuis la racine du projet.
 Un bloc = un fichier. Ne mélange pas plusieurs fichiers dans un seul bloc sans chemin.`;
 
+/** @deprecated Alias */
+export const CHATGPT_IMPORT_INSTRUCTION = EXTERNAL_AI_IMPORT_INSTRUCTION;
+
 export function printBridgeDiagram(): void {
-  console.log(chalk.cyan.bold('\n  🌉  Pont IDE ↔ votre IA (ChatGPT, Claude, etc.)\n'));
+  console.log(chalk.cyan.bold('\n  🌉  Pont IDE ↔ votre IA externe\n'));
   console.log(chalk.gray('  ┌─────────────┐         ┌──────────────────┐         ┌─────────────┐'));
-  console.log(chalk.gray('  │  Votre IDE  │  (1)    │  code-caricature │  (2)    │  Navigateur │'));
-  console.log(chalk.gray('  │  (Cursor…)  │ ──────► │  CLI (export)    │ ──────► │  ChatGPT    │'));
+  console.log(chalk.gray('  │  Votre IDE  │  (1)    │  code-caricature │  (2)    │  IA externe │'));
+  console.log(chalk.gray('  │             │ ──────► │  CLI (export)    │ ──────► │ (navigateur)│'));
   console.log(chalk.gray('  └─────────────┘         └──────────────────┘         └─────────────┘'));
   console.log(chalk.gray('        ▲                          │                          │'));
-  console.log(chalk.gray('        │                          │                          │'));
   console.log(chalk.gray('        │         (4) import       │         (3) copier       │'));
   console.log(chalk.gray('        └──────────────────────────┴──────────────────────────┘'));
-  console.log(chalk.gray('              Fichiers corrigés automatiquement dans le projet\n'));
+  console.log(chalk.gray('              Fichiers mis à jour dans le projet\n'));
   console.log(chalk.white('  Étapes :'));
-  console.log(chalk.gray('    1. Export : le CLI scanne votre projet et copie le contexte'));
-  console.log(chalk.gray('    2. Collez dans ChatGPT + décrivez votre bug / design'));
-  console.log(chalk.gray('    3. Copiez la réponse de ChatGPT (Ctrl+C)'));
-  console.log(chalk.gray('    4. Import : le CLI écrit les fichiers dans votre IDE\n'));
+  console.log(chalk.gray('    1. Export : scan du projet → presse-papiers'));
+  console.log(chalk.gray('    2. Collez dans votre IA + décrivez votre besoin'));
+  console.log(chalk.gray('    3. Copiez la réponse (Ctrl+C)'));
+  console.log(chalk.gray('    4. Import : le CLI écrit les fichiers\n'));
 }
 
-/**
- * Applique une réponse IA (presse-papiers ou texte) dans le projet.
- */
 export async function applyBridgeResponse(
   responseText: string,
   options: { dryRun?: boolean; autoConfirm?: boolean } = {}
 ): Promise<boolean> {
   const targetDir = process.cwd();
+  const preview = validateImportPreview(responseText);
+  if (loadLinkedSession() && preview.warnings.length > 0) {
+    console.log(chalk.yellow('\n  🤝  Compagnon (session liée) — alertes :\n'));
+    for (const w of preview.warnings) showWarning(w);
+  }
+
   const blocks = parseAIResponse(responseText);
 
   if (blocks.length === 0) {
     showWarning('Aucun bloc de code avec chemin de fichier détecté.');
-    showInfo('Demandez à ChatGPT d\'utiliser ce format :');
+    showInfo('Demandez à votre IA d\'utiliser ce format :');
     console.log(chalk.gray('  ```ts src/monFichier.ts'));
     console.log(chalk.gray('  // votre code'));
     console.log(chalk.gray('  ```'));
-    showInfo('Ou copiez le texte d\'aide : option « Copier les instructions pour ChatGPT » du menu.');
+    showInfo('Menu : « Copier les instructions pour l\'IA externe ».');
     return false;
   }
 
-  showSuccess(`${blocks.length} fichier(s) détecté(s) — le CLI va les mettre à jour dans votre projet :`);
+  showSuccess(`${blocks.length} fichier(s) détecté(s) :`);
   for (const block of blocks) {
     const fullPath = path.resolve(targetDir, block.filePath);
     const oldContent = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf8') : '';
@@ -66,14 +72,14 @@ export async function applyBridgeResponse(
   }
 
   if (options.dryRun) {
-    showInfo('Prévisualisation uniquement — aucun fichier modifié.');
+    showInfo('Prévisualisation — aucun fichier modifié.');
     return true;
   }
 
   let apply = options.autoConfirm ?? false;
   if (!apply) {
     apply = await confirm({
-      message: '✅  Appliquer ces modifications dans votre projet (IDE) ?',
+      message: '✅  Appliquer ces modifications dans votre projet ?',
       default: true,
     });
   }
@@ -97,22 +103,21 @@ export async function applyBridgeResponse(
     showWarning(`${result.errors.length} erreur(s) :`);
     for (const e of result.errors) console.log(chalk.red(`     ❌  ${e}`));
   }
+
+  recordImport(result.applied, result.created, result.errors);
   showInfo('Retournez dans votre IDE : les fichiers sont à jour.');
   return true;
 }
 
-/**
- * Menu guidé : recevoir la réponse ChatGPT et l'appliquer (cœur du pont).
- */
-export async function runBridgeImportFromChatGPT(): Promise<void> {
+export async function runBridgeImportFromExternal(): Promise<void> {
   printBridgeDiagram();
-  console.log(chalk.yellow.bold('  📥  Étape 4 — Importer la réponse de ChatGPT dans votre IDE\n'));
+  console.log(chalk.yellow.bold('  📥  Importer la réponse de votre IA dans le projet\n'));
 
   const source = await select({
-    message: 'Où se trouve la réponse de ChatGPT ?',
+    message: 'Source de la réponse ?',
     choices: [
-      { name: '📋  Presse-papiers (je viens de faire Ctrl+C sur ChatGPT)', value: 'clipboard' },
-      { name: '📄  Fichier enregistré (reponse.txt, .md…)', value: 'file' },
+      { name: '📋  Presse-papiers (Ctrl+C)', value: 'clipboard' },
+      { name: '📄  Fichier local', value: 'file' },
     ],
   });
 
@@ -123,16 +128,16 @@ export async function runBridgeImportFromChatGPT(): Promise<void> {
     try {
       responseText = clipboardy.readSync();
       if (!responseText.trim()) {
-        showWarning('Le presse-papiers est vide. Copiez d\'abord la réponse ChatGPT.');
+        showWarning('Presse-papiers vide.');
         return;
       }
-      showStep('📋', 'Réponse lue depuis le presse-papiers');
+      showStep('📋', 'Lecture du presse-papiers');
     } catch {
       showWarning('Impossible de lire le presse-papiers.');
       return;
     }
   } else {
-    const filePath = await input({ message: 'Chemin du fichier :', default: 'reponse-chatgpt.txt' });
+    const filePath = await input({ message: 'Chemin du fichier :', default: 'reponse-ia.txt' });
     const full = path.resolve(targetDir, filePath.trim());
     if (!fs.existsSync(full)) {
       showWarning(`Fichier introuvable : ${full}`);
@@ -145,13 +150,18 @@ export async function runBridgeImportFromChatGPT(): Promise<void> {
   await applyBridgeResponse(responseText);
 }
 
-export function copyChatGPTInstructions(): void {
+/** @deprecated */
+export const runBridgeImportFromChatGPT = runBridgeImportFromExternal;
+
+export function copyExternalAiInstructions(): void {
   try {
-    clipboardy.writeSync(CHATGPT_IMPORT_INSTRUCTION);
-    showSuccess('Instructions pour ChatGPT copiées dans le presse-papiers !');
-    showInfo('Collez-les une fois dans votre conversation ChatGPT avant de demander des corrections.');
+    clipboardy.writeSync(EXTERNAL_AI_IMPORT_INSTRUCTION);
+    showSuccess('Instructions copiées — collez-les une fois dans votre conversation IA.');
   } catch {
     showWarning('Presse-papiers inaccessible.');
-    console.log(chalk.gray('\n' + CHATGPT_IMPORT_INSTRUCTION + '\n'));
+    console.log(chalk.gray('\n' + EXTERNAL_AI_IMPORT_INSTRUCTION + '\n'));
   }
 }
+
+/** @deprecated */
+export const copyChatGPTInstructions = copyExternalAiInstructions;

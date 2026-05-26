@@ -32,10 +32,10 @@ export function showHelp(): void {
     console.log(chalk.gray('  ═══════════════════════════════════════════════════════'));
     console.log('');
 
-    console.log(chalk.white.bold('  🌉 PONT IDE ↔ ChatGPT (usage principal)'));
-    console.log(chalk.gray('  1. Export : envoyer le code au navigateur'));
-    console.log(chalk.green('       node dist/index.js  → menu « IDE → ChatGPT »'));
-    console.log(chalk.gray('  2. Import : appliquer la réponse ChatGPT dans les fichiers'));
+    console.log(chalk.white.bold('  🌉 PONT IDE ↔ IA externe (usage principal)'));
+    console.log(chalk.gray('  1. Export : envoyer le code à votre IA'));
+    console.log(chalk.green('       node dist/index.js  → menu pont ou session liée'));
+    console.log(chalk.gray('  2. Import : appliquer la réponse IA dans les fichiers'));
     console.log(chalk.green('       node dist/index.js bridge --clipboard'));
     console.log(chalk.gray('  3. Menu complet :'));
     console.log(chalk.green('       node dist/index.js'));

@@ -285,7 +285,7 @@ program
 
 program
     .command('bridge')
-    .description('Pont IDE ↔ ChatGPT : appliquer la réponse IA dans vos fichiers')
+    .description('Pont IDE ↔ IA externe : appliquer la réponse dans vos fichiers')
     .option('-c, --clipboard', 'Lire la réponse depuis le presse-papiers (défaut)')
     .option('-f, --file <file>', 'Lire la réponse depuis un fichier')
     .option('--dry-run', 'Prévisualiser sans modifier les fichiers')

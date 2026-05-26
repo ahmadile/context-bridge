@@ -1,157 +1,76 @@
-# 🎨 Code Caricature (`context-bridge`)
+# Code Caricature (`context-bridge`)
 
-**Le pont sémantique entre votre code local et les intelligences artificielles.**
+> **Projet en développement** — API et fonctionnalités peuvent changer.
 
-`code-caricature` est un outil en ligne de commande (CLI) écrit en TypeScript/Node.js. Il permet d'extraire de manière condensée et sécurisée le contexte d'un projet de développement (signatures de fonctions, arborescence, dépendances), de le soumettre à une intelligence artificielle, puis d'appliquer automatiquement les corrections proposées en retour sur vos fichiers locaux.
+CLI local pour faire le lien entre votre **IDE**, votre **IA externe** (navigateur ou autre) et vos **fichiers de projet** : export de contexte, import de corrections, sans recopier fichier par fichier.
 
 ---
 
-## 🚀 Commencer Immédiatement (Quickstart)
+## Démarrage rapide
 
-Pour utiliser ou tester l'outil sans frustration, voici les commandes essentielles à exécuter dans votre terminal.
-
-### 1. Installation et initialisation
 ```bash
-# Se placer dans le répertoire du projet
 cd context-bridge
-
-# Installer les dépendances
 npm install
-
-# Compiler le code TypeScript
 npm run build
-```
-
-### 2. Lancer le tableau de bord interactif (Menu guidé)
-```bash
-# Démarre l'interface interactive pas-à-pas
 node dist/index.js
 ```
 
-### 3. Commandes rapides en une ligne
-* **Exporter le projet** (génère un fichier de contexte pour l'IA) :
-  ```bash
-  node dist/index.js export --output caricature.txt --cost
-  ```
-* **Importer les corrections** (applique les modifications suggérées par l'IA) :
-  ```bash
-  node dist/index.js import --clipboard
-  ```
-* **Lancer l'IA locale en mode discussion** (pour vous guider pas-à-pas) :
-  ```bash
-  node dist/index.js attitude chat
-  ```
-
-### 4. Vérifier que tout fonctionne (diagnostic)
-```bash
-npm run build
-npm run doctor
-```
-Le diagnostic teste notamment le **serveur MCP** (3 outils) et l'état des IA (OpenAI / Qwen local).
+| Commande | Rôle |
+|----------|------|
+| `node dist/index.js` | Tableau de bord interactif |
+| `node dist/index.js bridge --clipboard` | Appliquer la réponse IA (presse-papiers) |
+| `node dist/index.js export` | Exporter le contexte du projet |
+| `node dist/index.js import --clipboard` | Importer des modifications |
+| `npm run doctor` | Diagnostic (build, MCP, modèles) |
 
 ---
 
-## 🌉 Usage principal : ChatGPT (navigateur) ↔ votre IDE
+## Usage principal : pont IDE ↔ IA externe
 
-C'est le cœur du CLI : **éviter le copier-coller fichier par fichier**.
+**L’import/export de fichiers ne nécessite pas l’IA intégrée au CLI** — ce sont des opérations directes sur le disque.
 
-1. **IDE → ChatGPT** : `node dist/index.js` → *« Pont IDE → ChatGPT »* (ou `export`) — le contexte du projet est copié ; collez-le dans ChatGPT.
-2. **ChatGPT → IDE** : copiez la réponse de ChatGPT, puis *« Pont ChatGPT → IDE »* (ou `bridge --clipboard`) — le CLI **écrit directement** dans vos fichiers.
+1. **IDE → IA** : export → collez le contexte dans votre IA.
+2. **IA → IDE** : copiez la réponse → `bridge --clipboard` ou menu « Pont IA → IDE ».
 
-Astuce : menu *« Copier les instructions pour ChatGPT »* pour que ChatGPT renvoie des blocs avec chemins (` ```ts src/fichier.ts `).
+Pour des réponses importables, utilisez le menu **« Instructions format import »** (blocs avec chemin de fichier).
 
----
+### Session liée (compagnon)
 
-## 🔌 Architecture : qui parle à qui ?
-
-```
-[ Votre IA de base : ChatGPT, Claude, Gemini… ]
-        │  (copier-coller ou client MCP)
-        ▼
-[ code-caricature CLI ]  ←→  [ Votre IDE / Cursor / VS Code ]
-        │
-        ├── export / import  → fichiers locaux
-        ├── mcp              → pont standardisé (get_project_context, apply_code_changes…)
-        └── attitude chat    → IA dans le CLI (OpenAI si clé, sinon Qwen local)
-```
-
-- **MCP** : pont entre une IA externe et votre projet (contexte, diffs, graphe). **Testé et fonctionnel** (`npm run test:mcp`).
-- **Attitude `chat`** : discussion dans le terminal ; utilise **OpenAI en priorité** si `OPENAI_API_KEY` est définie, sinon **Qwen local**.
-- **Attitude `tutoriel`** : même logique ; les **longues transcriptions** sont tronquées pour l'IA locale (~6000 car.) mais complètes pour OpenAI.
+Pendant une discussion avec votre IA externe, le menu **« Session liée »** accompagne export/import : vérification avant import, alertes, bilan. L’IA du CLI intervient surtout en cas de problème — pas pour remplacer l’import automatique.
 
 ---
 
-## 🎯 Liste des Fonctionnalités Implémentées
+## Rôles des composants
 
-### 1. Mode Export (`export`)
-Extrait et formate le contexte global du workspace pour le transmettre à une IA.
-* **Filtre de Sécurité :** Masque automatiquement les secrets (clés d'API, mots de passe, tokens) détectés dans les fichiers.
-* **Mode Architecture (AST) :** Extrait uniquement la structure globale (signatures de fonctions, classes, interfaces) pour consommer le moins de tokens possible.
-* **Graphe de Dépendances :** Analyse les imports et représente les dépendances entre les fichiers.
-* **Estimation de Coût :** Évalue le nombre de tokens et estime le coût financier sur les principaux modèles généraux.
-
-### 2. Mode Import (`import`)
-Réintègre les modifications de code rédigées par l'IA directement dans les fichiers locaux.
-* **Multi-fichiers :** Met à jour plusieurs fichiers et crée les nouveaux sous-dossiers automatiquement si la réponse contient des blocs de code annotés avec leurs chemins (ex : ` ```typescript src/index.ts `).
-* **Prévisualisation interactive (Dry Run) :** Affiche un diff couleur clair (git-like) montrant précisément les modifications proposées avant de toucher physiquement aux fichiers.
-
-### 3. IA Locale et Attitudes (`attitude`)
-Permet d'utiliser l'IA locale `Qwen2.5-Coder-1.5B-Instruct` (téléchargée automatiquement à la première exécution dans `~/.code-caricature/models/`).
-* **Attitude `chat` (Discussion) :** Session de discussion interactive locale avec des fonctionnalités d'agent :
-  * **Pièces jointes par `@` :** Tapez `@src/interactive.ts` ou `@package.json` dans votre message, et le CLI lit et injecte automatiquement le contenu du fichier ou du répertoire ciblé.
-  * **Agent avec validation utilisateur :** L'IA locale maîtrise le CLI et peut suggérer d'exécuter des commandes en retournant des lignes commençant par `$`. **Toute commande suggérée par l'IA doit être explicitement validée par l'utilisateur (invite de confirmation interactive `y/N`) avant son exécution.**
-* **Attitude `tutoriel` (Mentorat) :** Guide l'utilisateur pas-à-pas à partir d'une transcription textuelle (chargée depuis un fichier ou directement copiée dans le presse-papiers via `--transcript clipboard`). Analyse le code écrit à chaque étape à l'aide d'un parser AST pour valider la progression.
-* **Double IA (Fallback) :** Utilise par défaut l'API OpenAI si configurée, et bascule de manière invisible sur l'IA locale autonome en cas d'erreur réseau, d'absence de clé ou de dépassement de quota.
-
-### 4. Persistance des Sessions
-* Sauvegarde automatique des discussions et mentorats en temps réel dans `~/.code-caricature/sessions/`.
-* Identification des sessions par hash SHA-256 du chemin absolu du répertoire actif. Chaque dossier de travail possède sa propre mémoire isolée.
-
-### 5. Mode Serveur MCP (`mcp`)
-Expose le CLI comme un serveur local standardisé en suivant le protocole **Model Context Protocol** de Anthropic.
-* Permet à des clients IA externes comme **Claude Desktop**, **Cursor** ou **VS Code** d'appeler les outils locaux de `code-caricature` (`get_project_context`, `get_dependency_graph`, `apply_code_changes`).
-* Redirige automatiquement toutes les instructions de log `stdout` vers `stderr` pour ne pas perturber le protocole JSON-RPC de communication de l'agent.
+| Composant | Rôle |
+|-----------|------|
+| **Export / import** | Transfert de contexte et de code (automatique) |
+| **Session liée** | Surveillance légère, validation, historique de la session |
+| **Discussion (`attitude chat`)** | Aide code, questions courtes, secours |
+| **Tutoriel** | Transcription découpée, mentorat pas à pas |
+| **MCP** | Intégration avec certains clients (IDE / assistants) |
 
 ---
 
-## ⚙️ Configuration du Serveur MCP (Claude Desktop)
+## Configuration MCP (optionnel)
 
-Pour connecter Claude Desktop à votre serveur local `code-caricature`, modifiez votre fichier de configuration `%APPDATA%\Claude\claude_desktop_config.json` sous Windows :
+Exemple Windows (`claude_desktop_config.json`) — adaptez le chemin :
 
 ```json
 {
   "mcpServers": {
     "code-caricature": {
       "command": "node",
-      "args": [
-        "D:\\caricature\\context-bridge\\dist\\index.js",
-        "mcp"
-      ]
+      "args": ["CHEMIN_VERS/dist/index.js", "mcp"]
     }
   }
 }
 ```
-*(Remplacez le chemin absolu vers `dist/index.js` par celui correspondant à votre répertoire d'installation réel).*
 
 ---
 
-## 🧠 Note d'Architecture pour les Agents IA de passage
+## Notes techniques (contributeurs)
 
-> [!NOTE]
-> Cette section est destinée aux assistants IA qui travaillent sur cette base de code.
-> * Le projet utilise une architecture **CommonJS** (`"type": "commonjs"` dans `package.json`).
-> * La bibliothèque `node-llama-cpp` est un module ESM avec "top-level await" et ne peut pas être importée classiquement via `require` en CommonJS. Pour contourner la transpilation TypeScript, nous utilisons l'évaluation dynamique : `Function('return import("node-llama-cpp")')()`. Ne modifiez pas cette logique au risque de casser le chargement de l'IA locale.
-> * Les logs destinés aux humains doivent utiliser les fonctions formatées de `src/ui.ts`. En mode MCP (`src/mcp-server.ts`), la sortie standard `console.log` est désactivée et redirigée vers la sortie d'erreur standard `console.error` pour préserver le flux de communication JSON-RPC de `stdout`.
-
-### État des fonctionnalités (audit)
-
-| Fonctionnalité | Statut | Notes |
-|----------------|--------|-------|
-| `export` | ✅ | Scan, sécurité, AST, graphe, coût |
-| `import` | ✅ | Multi-fichiers, dry-run |
-| `mcp` | ✅ | 3 outils ; test : `npm run test:mcp` |
-| `attitude chat` | ✅ | OpenAI prioritaire ; Qwen en secours ; `@fichier` tronqué si trop long |
-| `attitude tutoriel` | ✅ | Transcription complète (cloud) / extrait (local) |
-| Mode interactif | ✅ | Menu guidé |
-| Autres attitudes | ⚠️ | Seuls `chat` et `tutoriel` sont implémentés |
-| IA locale seule sur long transcript | ⚠️ | Modèle 1,5B : préférer OpenAI ou transcripts courts |
+- CommonJS (`"type": "commonjs"`).
+- `node-llama-cpp` : import dynamique `Function('return import("node-llama-cpp")')()` — ne pas remplacer par un `require` classique.
+- Mode MCP : logs humains via `stderr` uniquement.
