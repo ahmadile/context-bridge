@@ -42,6 +42,32 @@ node dist/index.js
   node dist/index.js attitude chat
   ```
 
+### 4. Vérifier que tout fonctionne (diagnostic)
+```bash
+npm run build
+npm run doctor
+```
+Le diagnostic teste notamment le **serveur MCP** (3 outils) et l'état des IA (OpenAI / Qwen local).
+
+---
+
+## 🔌 Architecture : qui parle à qui ?
+
+```
+[ Votre IA de base : ChatGPT, Claude, Gemini… ]
+        │  (copier-coller ou client MCP)
+        ▼
+[ code-caricature CLI ]  ←→  [ Votre IDE / Cursor / VS Code ]
+        │
+        ├── export / import  → fichiers locaux
+        ├── mcp              → pont standardisé (get_project_context, apply_code_changes…)
+        └── attitude chat    → IA dans le CLI (OpenAI si clé, sinon Qwen local)
+```
+
+- **MCP** : pont entre une IA externe et votre projet (contexte, diffs, graphe). **Testé et fonctionnel** (`npm run test:mcp`).
+- **Attitude `chat`** : discussion dans le terminal ; utilise **OpenAI en priorité** si `OPENAI_API_KEY` est définie, sinon **Qwen local**.
+- **Attitude `tutoriel`** : même logique ; les **longues transcriptions** sont tronquées pour l'IA locale (~6000 car.) mais complètes pour OpenAI.
+
 ---
 
 ## 🎯 Liste des Fonctionnalités Implémentées
@@ -105,3 +131,16 @@ Pour connecter Claude Desktop à votre serveur local `code-caricature`, modifiez
 > * Le projet utilise une architecture **CommonJS** (`"type": "commonjs"` dans `package.json`).
 > * La bibliothèque `node-llama-cpp` est un module ESM avec "top-level await" et ne peut pas être importée classiquement via `require` en CommonJS. Pour contourner la transpilation TypeScript, nous utilisons l'évaluation dynamique : `Function('return import("node-llama-cpp")')()`. Ne modifiez pas cette logique au risque de casser le chargement de l'IA locale.
 > * Les logs destinés aux humains doivent utiliser les fonctions formatées de `src/ui.ts`. En mode MCP (`src/mcp-server.ts`), la sortie standard `console.log` est désactivée et redirigée vers la sortie d'erreur standard `console.error` pour préserver le flux de communication JSON-RPC de `stdout`.
+
+### État des fonctionnalités (audit)
+
+| Fonctionnalité | Statut | Notes |
+|----------------|--------|-------|
+| `export` | ✅ | Scan, sécurité, AST, graphe, coût |
+| `import` | ✅ | Multi-fichiers, dry-run |
+| `mcp` | ✅ | 3 outils ; test : `npm run test:mcp` |
+| `attitude chat` | ✅ | OpenAI prioritaire ; Qwen en secours ; `@fichier` tronqué si trop long |
+| `attitude tutoriel` | ✅ | Transcription complète (cloud) / extrait (local) |
+| Mode interactif | ✅ | Menu guidé |
+| Autres attitudes | ⚠️ | Seuls `chat` et `tutoriel` sont implémentés |
+| IA locale seule sur long transcript | ⚠️ | Modèle 1,5B : préférer OpenAI ou transcripts courts |

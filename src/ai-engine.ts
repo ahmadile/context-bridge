@@ -55,8 +55,9 @@ export class AIEngine {
     });
 
     console.log(`[+] L'IA réfléchit (Localement)...`);
-    const response = await session.prompt(userPrompt);
-    return response;
+    const response = await session.prompt(userPrompt, { maxTokens: 1024 });
+    const text = (response || '').trim();
+    return text || "Réponse vide du modèle local. Reformulez votre question plus simplement.";
   }
 
   /**
@@ -76,7 +77,17 @@ export class AIEngine {
     return {
       async chat(message: string): Promise<string> {
         console.log(`[+] L'IA locale réfléchit...`);
-        return await session.prompt(message);
+        const response = await session.prompt(message, {
+          maxTokens: 1024,
+        });
+        const text = (response || '').trim();
+        if (!text) {
+          return (
+            "Je n'ai pas pu formuler de réponse (sortie vide). " +
+            "Essayez une question plus courte, ou configurez OPENAI_API_KEY pour utiliser la Grande IA."
+          );
+        }
+        return text;
       }
     };
   }

@@ -16,11 +16,12 @@ import { formatContext } from "./formatter";
 import { extractSignatures, formatSignatures } from "./ast-parser";
 import { buildDependencyGraph, formatDependencyGraph } from "./dep-graph";
 import { parseAIResponse, generateDiff, applyCodeBlocks } from "./importer";
+import { getPackageVersion } from "./version";
 
 // Initialisation du serveur MCP
 const server = new McpServer({
   name: "code-caricature-server",
-  version: "1.3.0",
+  version: getPackageVersion(),
 });
 
 // Outil 1 : get_project_context

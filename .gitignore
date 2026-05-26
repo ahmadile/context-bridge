@@ -8,3 +8,5 @@ dist/
 coverage/
 code-caricature.txt
 .temp-transcript.txt
+test-context*.txt
+test-v11.txt

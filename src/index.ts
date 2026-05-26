@@ -12,13 +12,14 @@ import clipboardy from 'clipboardy';
 import fs from 'fs';
 import path from 'path';
 import { runTutorielAttitude } from './attitudes/tutoriel';
+import { getPackageVersion } from './version';
 
 const program = new Command();
 
 program
     .name('code-caricature')
     .description('🎨 Fais la caricature de ton code, donne-la à ton IA !')
-    .version('1.3.0');
+    .version(getPackageVersion());
 
 // ─── EXPORT COMMAND ─────────────────────────────────────────────────
 
@@ -280,6 +281,14 @@ program
     .action(async () => {
         const { runMcpServer } = await import('./mcp-server');
         await runMcpServer();
+    });
+
+program
+    .command('doctor')
+    .description('Diagnostiquer le CLI (build, MCP, IA locale/cloud)')
+    .action(async () => {
+        const { runDoctor } = await import('./doctor');
+        await runDoctor();
     });
 
 // ─── HELP COMMAND ───────────────────────────────────────────────────

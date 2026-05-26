@@ -15,6 +15,12 @@ import { AIEngine } from '../ai-engine';
 import { scanDirectory, readFilesContent } from '../scanner';
 import { extractSignatures, formatSignatures } from '../ast-parser';
 import { loadSession, saveSession, Message } from '../session-manager';
+import {
+  prepareTranscriptForLocal,
+  findTranscriptExcerpt,
+  compactHistoryForLocal,
+  LOCAL_TRANSCRIPT_MAX_CHARS,
+} from '../transcript-utils';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -25,7 +31,15 @@ interface MentorEngine {
 
 // ─── System Prompt ──────────────────────────────────────────────────
 
-function buildSystemPrompt(transcript: string): string {
+function buildSystemPrompt(transcript: string, forLocalAi: boolean): string {
+  const prepared = forLocalAi
+    ? prepareTranscriptForLocal(transcript)
+    : { excerpt: transcript, truncated: false, fullLength: transcript.length };
+
+  const truncationNote = prepared.truncated
+    ? `\n7. La transcription a été raccourcie (${prepared.fullLength.toLocaleString()} car. au total) : base-toi sur l'extrait et demande des précisions si besoin.\n`
+    : '';
+
   return `Tu es un mentor expert en programmation. Tu accompagnes un développeur qui suit un tutoriel vidéo.
 
 RÈGLES IMPORTANTES :
@@ -34,11 +48,11 @@ RÈGLES IMPORTANTES :
 3. Après chaque étape, attends que l'utilisateur te montre son code avant de continuer.
 4. Si l'utilisateur fait une erreur, explique-lui POURQUOI c'est faux et guide-le vers la correction.
 5. Sois encourageant et pédagogue. L'objectif est qu'il COMPRENNE, pas qu'il copie-colle.
-6. Réponds TOUJOURS en français.
-
-Voici la transcription complète du tutoriel :
+6. Réponds TOUJOURS en français. Réponds de façon directe et structurée (résumé court + étape + question).
+${truncationNote}
+Voici la transcription du tutoriel :
 ---
-${transcript}
+${prepared.excerpt}
 ---
 
 Commence par résumer brièvement ce que le tutoriel va enseigner, puis donne la PREMIÈRE étape (un seul concept ou une seule action à faire). Termine toujours par une question pour vérifier que l'utilisateur a compris.`;
@@ -46,7 +60,7 @@ Commence par résumer brièvement ce que le tutoriel va enseigner, puis donne la
 
 // ─── Engine Initialization ──────────────────────────────────────────
 
-async function initMentorEngine(systemPrompt: string): Promise<MentorEngine> {
+async function initMentorEngine(systemPrompt: string, systemPromptLocal: string): Promise<MentorEngine> {
   // Try the Grande IA first (OpenAI)
   const openai = new OpenAIEngine();
   const openaiReady = await openai.init();
@@ -64,7 +78,7 @@ async function initMentorEngine(systemPrompt: string): Promise<MentorEngine> {
   console.log(chalk.yellow(`  ⚠ Pas de clé OPENAI_API_KEY détectée.`));
   console.log(chalk.blue(`  → Basculement vers l'IA locale (Qwen2.5-Coder)...`));
   
-  const localSession = await AIEngine.createSession(systemPrompt);
+  const localSession = await AIEngine.createSession(systemPromptLocal);
   console.log(chalk.green(`  ✓ IA locale prête`));
   return {
     name: 'Qwen (Local)',
@@ -75,12 +89,12 @@ async function initMentorEngine(systemPrompt: string): Promise<MentorEngine> {
 /**
  * Attempt to fallback to local AI mid-conversation.
  */
-async function fallbackToLocal(systemPrompt: string, lastUserMessage: string): Promise<MentorEngine | null> {
+async function fallbackToLocal(systemPromptLocal: string): Promise<MentorEngine | null> {
   try {
     console.log(chalk.yellow(`\n  ⚠ La Grande IA n'est plus disponible (quota atteint ?)`));
     console.log(chalk.blue(`  → Basculement automatique vers l'IA locale...`));
     
-    const localSession = await AIEngine.createSession(systemPrompt);
+    const localSession = await AIEngine.createSession(systemPromptLocal);
     // Re-send the last message so the user doesn't lose their turn
     console.log(chalk.gray(`  → Renvoi de votre dernière question à l'IA locale...`));
     return {
@@ -132,10 +146,19 @@ export async function runTutorielAttitude(transcriptPath: string) {
   }
 
   const transcript = fs.readFileSync(transcriptPath, 'utf-8');
-  console.log(chalk.gray(`  📄 Transcription chargée (${transcript.length} caractères)`));
+  console.log(chalk.gray(`  📄 Transcription chargée (${transcript.length.toLocaleString()} caractères)`));
 
-  // 2. Build system prompt
-  const systemPrompt = buildSystemPrompt(transcript);
+  if (transcript.length > LOCAL_TRANSCRIPT_MAX_CHARS) {
+    console.log(
+      chalk.yellow(
+        `  ⚠ Transcription longue : l'IA locale n'utilisera qu'un extrait (~${LOCAL_TRANSCRIPT_MAX_CHARS.toLocaleString()} car.). OpenAI utilisera le texte complet.`
+      )
+    );
+  }
+
+  // 2. Build system prompts (full for cloud, excerpt for local)
+  const systemPromptCloud = buildSystemPrompt(transcript, false);
+  const systemPromptLocal = buildSystemPrompt(transcript, true);
 
   // 3. Check for existing session
   let history: Message[] = [];
@@ -168,7 +191,7 @@ export async function runTutorielAttitude(transcriptPath: string) {
   // 4. Initialize the mentor (Grande IA or Local)
   let engine: MentorEngine;
   try {
-    engine = await initMentorEngine(systemPrompt);
+    engine = await initMentorEngine(systemPromptCloud, systemPromptLocal);
   } catch (e: any) {
     console.error(chalk.red(`  ✗ Impossible d'initialiser l'IA : ${e.message}`));
     return;
@@ -182,7 +205,7 @@ export async function runTutorielAttitude(transcriptPath: string) {
   if (restored && history.length > 0) {
     console.log(chalk.gray(`  ⚙️   Synchronisation du mentor...`));
     const historySeed = `Voici l'historique de notre session de mentorat précédente pour ton contexte :\n` +
-      history.map(m => `${m.role === 'user' ? 'Développeur' : 'Mentor'}: ${m.content}`).join('\n') +
+      compactHistoryForLocal(history) +
       `\n\nContinue de me guider pas-à-pas à partir de cet historique de conversation. Ne recommence pas le tutoriel depuis le début.`;
     
     try {
@@ -245,6 +268,12 @@ export async function runTutorielAttitude(transcriptPath: string) {
     } else if (action === 'question') {
       const q = await input({ message: '💬  Votre question :' });
       userMessage = q;
+      if (engine.name.includes('Local') || engine.name.includes('Qwen')) {
+        const excerpt = findTranscriptExcerpt(transcript, q);
+        if (excerpt) {
+          userMessage += `\n\n[Extrait pertinent de la transcription]:\n---\n${excerpt}\n---`;
+        }
+      }
     }
 
     // Save user message to history
@@ -257,7 +286,7 @@ export async function runTutorielAttitude(transcriptPath: string) {
     } catch (e: any) {
       // If the Grande IA fails, try to fallback to local
       if (e.message === 'QUOTA_EXCEEDED') {
-        const localEngine = await fallbackToLocal(systemPrompt, userMessage);
+        const localEngine = await fallbackToLocal(systemPromptLocal);
         if (localEngine) {
           engine = localEngine;
           // Retry with the local engine
@@ -280,6 +309,11 @@ export async function runTutorielAttitude(transcriptPath: string) {
     // Save assistant response to history
     history.push({ role: 'assistant', content: response });
     saveSession('tutoriel', history);
+
+    if (!response || !response.trim()) {
+      console.log(chalk.yellow(`\n  ⚠ Le mentor n'a pas renvoyé de texte (réponse vide). Réessayez ou utilisez OPENAI_API_KEY.\n`));
+      continue;
+    }
 
     // Display the mentor's response
     console.log(chalk.green.bold(`\n  ═══ Mentor (${engine.name}) ═══\n`));

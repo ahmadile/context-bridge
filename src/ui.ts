@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 const chalk = require('chalk');
 import figlet from 'figlet';
+import { getPackageVersion } from './version';
 
 /**
  * Display the beautiful ASCII art banner for Code Caricature
@@ -18,7 +19,7 @@ export function showBanner(): void {
     console.log(chalk.gray('  ─────────────────────────────────────────────────────────'));
     console.log(chalk.yellow('  🎨  Fais la caricature de ton code, donne-la à ton IA !'));
     console.log(chalk.gray('  ─────────────────────────────────────────────────────────'));
-    console.log(chalk.gray('                       v1.3.0'));
+  console.log(chalk.gray(`                       v${getPackageVersion()}`));
     console.log('');
 }
 
@@ -33,7 +34,7 @@ export function showHelp(): void {
 
     console.log(chalk.white.bold('  🚀 MODE INTERACTIF (Débutants)'));
     console.log(chalk.gray('  Lancez simplement la commande sans arguments :'));
-    console.log(chalk.green('    npx ts-node src/index.ts'));
+  console.log(chalk.green('    node dist/index.js'));
     console.log(chalk.gray('  → Un menu visuel vous guidera étape par étape.'));
     console.log('');
 
