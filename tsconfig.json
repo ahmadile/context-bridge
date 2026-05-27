@@ -5,11 +5,11 @@
     "outDir": "./dist",
     "target": "es2022",
     "module": "commonjs",
-    "lib": ["es2022", "es5"],
+    "lib": ["es2022", "dom"],
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "skipLibCheck": false,
+    "skipLibCheck": true,
     "types": ["node"]
   }
 }
