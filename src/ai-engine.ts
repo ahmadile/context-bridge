@@ -5,7 +5,7 @@ import https from 'https';
 
 // Path to store the model
 const modelDir = path.join(os.homedir(), '.code-caricature', 'models');
-const modelName = 'qwen2.5-coder-1.5b-instruct-q4_k_m.gguf'; // Very capable, very small model
+const modelName = 'qwen2.5-coder-1.5b-instruct-q4_k_m.gguf';
 const modelPath = path.join(modelDir, modelName);
 
 export interface LocalChatSession {
@@ -16,29 +16,14 @@ export class AIEngine {
   private static instance: any = null;
 
   /**
-   * Initialize the Llama engine.
-   * In a real implementation, this would download the model if it doesn't exist,
-   * then initialize the node-llama-cpp context.
+   * Initialize the Llama engine - DISABLED for space constraints
    */
   static async init() {
     if (this.instance) return;
     
-    // We dynamically import node-llama-cpp to avoid slowing down the CLI when AI is not used
-    const { getLlama } = await import('node-llama-cpp');
-    
-    if (!fs.existsSync(modelPath)) {
-      console.log(`\n[!] Le modèle local n'a pas été trouvé à l'emplacement : ${modelPath}`);
-      console.log(`[+] Début du téléchargement automatique de Qwen2.5-Coder (environ 1.1 Go)...`);
-      console.log(`[+] Cette opération n'est effectuée qu'une seule fois.`);
-      
-      const modelUrl = 'https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf';
-      await this.downloadModel(modelUrl, modelPath);
-      console.log(`\n[+] Téléchargement terminé avec succès !`);
-    }
-
-    console.log(`[+] Initialisation du modèle local (${modelName})...`);
-    const llama = await getLlama();
-    this.instance = await llama.loadModel({ modelPath });
+    console.log(`[!] Le modèle local (node-llama-cpp) a été désactivé pour économiser l'espace disque.`);
+    console.log(`[+] Veuillez utiliser OPENAI_API_KEY ou une autre API cloud pour les fonctionnalités IA.`);
+    throw new Error("Local AI engine is disabled due to missing node-llama-cpp dependency");
   }
 
   /**
@@ -46,18 +31,7 @@ export class AIEngine {
    */
   static async askLocalModel(systemPrompt: string, userPrompt: string): Promise<string> {
     await this.init();
-    
-    const { LlamaChatSession } = await import('node-llama-cpp');
-    const context = await this.instance.createContext();
-    const session = new LlamaChatSession({
-      contextSequence: context.getSequence(),
-      systemPrompt: systemPrompt
-    });
-
-    console.log(`[+] L'IA réfléchit (Localement)...`);
-    const response = await session.prompt(userPrompt, { maxTokens: 1024 });
-    const text = (response || '').trim();
-    return text || "Réponse vide du modèle local. Reformulez votre question plus simplement.";
+    return "Local AI is currently disabled.";
   }
 
   /**
@@ -66,28 +40,9 @@ export class AIEngine {
    */
   static async createSession(systemPrompt: string): Promise<LocalChatSession> {
     await this.init();
-
-    const { LlamaChatSession } = await import('node-llama-cpp');
-    const context = await this.instance.createContext();
-    const session = new LlamaChatSession({
-      contextSequence: context.getSequence(),
-      systemPrompt: systemPrompt
-    });
-
     return {
       async chat(message: string): Promise<string> {
-        console.log(`[+] L'IA locale réfléchit...`);
-        const response = await session.prompt(message, {
-          maxTokens: 1024,
-        });
-        const text = (response || '').trim();
-        if (!text) {
-          return (
-            "Je n'ai pas pu formuler de réponse (sortie vide). " +
-            "Essayez une question plus courte, ou configurez OPENAI_API_KEY pour utiliser la Grande IA."
-          );
-        }
-        return text;
+        return "Local AI is currently disabled.";
       }
     };
   }
