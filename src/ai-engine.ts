@@ -24,7 +24,7 @@ export class AIEngine {
     if (this.instance) return;
     
     // We dynamically import node-llama-cpp to avoid slowing down the CLI when AI is not used
-    const { getLlama } = await (Function('return import("node-llama-cpp")')() as Promise<any>);
+    const { getLlama } = await import('node-llama-cpp');
     
     if (!fs.existsSync(modelPath)) {
       console.log(`\n[!] Le modèle local n'a pas été trouvé à l'emplacement : ${modelPath}`);
@@ -47,7 +47,7 @@ export class AIEngine {
   static async askLocalModel(systemPrompt: string, userPrompt: string): Promise<string> {
     await this.init();
     
-    const { LlamaChatSession } = await (Function('return import("node-llama-cpp")')() as Promise<any>);
+    const { LlamaChatSession } = await import('node-llama-cpp');
     const context = await this.instance.createContext();
     const session = new LlamaChatSession({
       contextSequence: context.getSequence(),
@@ -67,7 +67,7 @@ export class AIEngine {
   static async createSession(systemPrompt: string): Promise<LocalChatSession> {
     await this.init();
 
-    const { LlamaChatSession } = await (Function('return import("node-llama-cpp")')() as Promise<any>);
+    const { LlamaChatSession } = await import('node-llama-cpp');
     const context = await this.instance.createContext();
     const session = new LlamaChatSession({
       contextSequence: context.getSequence(),
