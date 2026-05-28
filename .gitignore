@@ -1,1 +1,4 @@
-Nothing needs to be added to the .gitignore file based on the provided changes, as only TypeScript source files were added and modified without any build artifacts, dependencies, or temporary files.
+```
+# Build artifacts
+dist/
+```
