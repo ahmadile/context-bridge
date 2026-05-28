@@ -1,10 +1,14 @@
 #!/usr/bin/env node
+/**
+ * Code Caricature - CLI Principal
+ * Pont sémantique entre votre code local et les intelligences artificielles.
+ */
 import { Command } from 'commander';
 import { scanDirectory, generateTree, readFilesContent } from './scanner';
 import { countTokens } from './tokenCounter';
 import { formatContext, TargetModel, estimateCost, formatCostTable } from './formatter';
 import { extractSignatures, formatSignatures } from './ast-parser';
-import { buildDependencyGraph, getRelatedFiles, formatDependencyGraph } from './dep-graph';
+import { buildDependencyGraph, formatDependencyGraph } from './dep-graph';
 import { parseAIResponse, generateDiff, applyCodeBlocks } from './importer';
 import { showBanner, showHelp, showStep, showSuccess, showWarning, showInfo, showTokenCount } from './ui';
 import { runInteractiveMode } from './interactive';
@@ -13,6 +17,8 @@ import fs from 'fs';
 import path from 'path';
 import { runTutorielAttitude } from './attitudes/tutoriel';
 import { getPackageVersion } from './version';
+import { runExport } from './commands/export';
+import { runImport } from './commands/import';
 
 const program = new Command();
 
