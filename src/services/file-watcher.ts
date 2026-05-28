@@ -76,8 +76,25 @@ export class FileWatcher extends EventEmitter {
     this.watcher = chokidar.watch(patterns, {
       cwd: this.options.cwd,
       ignored: (filePath: string) => {
-        const relativePath = path.relative(this.options.cwd, path.join(this.options.cwd, filePath));
-        return this.ignoreRules.ignores(relativePath);
+        // Normaliser le chemin: utiliser des slashes forward pour le module ignore
+        // et s'assurer qu'il est relatif
+        if (!filePath || filePath.trim() === '') {
+          return true; // Ignorer les chemins vides
+        }
+        
+        let normalizedPath = filePath;
+        if (path.isAbsolute(filePath)) {
+          normalizedPath = path.relative(this.options.cwd, filePath);
+        }
+        // Remplacer les antislashes par des slashes forward (requis par le module ignore)
+        normalizedPath = normalizedPath.replace(/\\/g, '/');
+        
+        // Ignorer si le chemin est toujours vide après normalisation
+        if (!normalizedPath || normalizedPath.trim() === '') {
+          return true;
+        }
+        
+        return this.ignoreRules.ignores(normalizedPath);
       },
       persistent: true,
       ignoreInitial: true,
@@ -150,9 +167,12 @@ export class FileWatcher extends EventEmitter {
     for (const [dir, filenames] of Object.entries(watchedFiles)) {
       for (const filename of filenames) {
         const fullPath = path.join(dir, filename);
-        const relativePath = path.relative(this.options.cwd, fullPath);
+        let relativePath = path.relative(this.options.cwd, fullPath);
+        // Normaliser les slashes pour le module ignore
+        const normalizedPath = relativePath.replace(/\\/g, '/');
         
-        if (!this.ignoreRules.ignores(relativePath)) {
+        // Vérifier que le chemin n'est pas vide
+        if (normalizedPath && normalizedPath.trim() !== '' && !this.ignoreRules.ignores(normalizedPath)) {
           const content = this.getFileContent(relativePath);
           if (content !== null) {
             files.push({ filePath: relativePath, content });

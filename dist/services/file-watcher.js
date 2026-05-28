@@ -64,8 +64,22 @@ class FileWatcher extends events_1.EventEmitter {
         this.watcher = chokidar_1.default.watch(patterns, {
             cwd: this.options.cwd,
             ignored: (filePath) => {
-                const relativePath = path_1.default.relative(this.options.cwd, path_1.default.join(this.options.cwd, filePath));
-                return this.ignoreRules.ignores(relativePath);
+                // Normaliser le chemin: utiliser des slashes forward pour le module ignore
+                // et s'assurer qu'il est relatif
+                if (!filePath || filePath.trim() === '') {
+                    return true; // Ignorer les chemins vides
+                }
+                let normalizedPath = filePath;
+                if (path_1.default.isAbsolute(filePath)) {
+                    normalizedPath = path_1.default.relative(this.options.cwd, filePath);
+                }
+                // Remplacer les antislashes par des slashes forward (requis par le module ignore)
+                normalizedPath = normalizedPath.replace(/\\/g, '/');
+                // Ignorer si le chemin est toujours vide après normalisation
+                if (!normalizedPath || normalizedPath.trim() === '') {
+                    return true;
+                }
+                return this.ignoreRules.ignores(normalizedPath);
             },
             persistent: true,
             ignoreInitial: true,
@@ -133,8 +147,11 @@ class FileWatcher extends events_1.EventEmitter {
         for (const [dir, filenames] of Object.entries(watchedFiles)) {
             for (const filename of filenames) {
                 const fullPath = path_1.default.join(dir, filename);
-                const relativePath = path_1.default.relative(this.options.cwd, fullPath);
-                if (!this.ignoreRules.ignores(relativePath)) {
+                let relativePath = path_1.default.relative(this.options.cwd, fullPath);
+                // Normaliser les slashes pour le module ignore
+                const normalizedPath = relativePath.replace(/\\/g, '/');
+                // Vérifier que le chemin n'est pas vide
+                if (normalizedPath && normalizedPath.trim() !== '' && !this.ignoreRules.ignores(normalizedPath)) {
                     const content = this.getFileContent(relativePath);
                     if (content !== null) {
                         files.push({ filePath: relativePath, content });
