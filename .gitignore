@@ -1,4 +1,24 @@
-```
+# Dependencies
+node_modules/
+
 # Build artifacts
 dist/
-```
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Local AI models
+models/
+*.gguf
