@@ -48,20 +48,37 @@ export async function runDoctor(): Promise<void> {
   }
 
   // Local model
+  let ollamaOk = false;
+  let ollamaModels: string[] = [];
+  try {
+    const res = await fetch('http://localhost:11434/api/tags');
+    if (res.status === 200) {
+      const data = await res.json() as any;
+      ollamaOk = true;
+      if (data.models && data.models.length > 0) {
+        ollamaModels = data.models.map((m: any) => m.name);
+      }
+    }
+  } catch (e) {}
+
   const modelPath = path.join(
     os.homedir(),
     '.code-caricature',
     'models',
     'qwen2.5-coder-1.5b-instruct-q4_k_m.gguf'
   );
-  if (fs.existsSync(modelPath)) {
+
+  if (ollamaOk) {
+    const modelsStr = ollamaModels.length > 0 ? ollamaModels.join(', ') : 'aucun modèle détecté';
+    check('IA locale (Ollama)', 'ok', `Ollama est actif sur http://localhost:11434 (Modèles : ${modelsStr})`);
+  } else if (fs.existsSync(modelPath)) {
     const mb = (fs.statSync(modelPath).size / 1024 / 1024).toFixed(0);
-    check('IA locale (Qwen)', 'ok', `Modèle présent (${mb} Mo)`);
+    check('IA locale (Qwen GGUF)', 'ok', `Modèle présent (${mb} Mo) - Prêt pour fallback node-llama-cpp`);
   } else {
     check(
-      'IA locale (Qwen)',
+      'IA locale (Ollama / Qwen GGUF)',
       'warn',
-      `Modèle absent — sera téléchargé (~1,1 Go) au premier usage : ${modelPath}`
+      `Aucun service local détecté. Lancez Ollama (ollama run qwen2.5-coder:1.5b) ou installez le modèle GGUF.`
     );
   }
 

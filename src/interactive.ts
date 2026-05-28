@@ -98,6 +98,8 @@ async function runMoreMenu(): Promise<void> {
     choices: [
       { name: 'Tutoriel (transcription vidéo)', value: 'tutoriel' },
       { name: 'Discussion IA (terminal)', value: 'chat' },
+      { name: '🔴 Live Coding (Surveillance en temps réel)', value: 'watch' },
+      { name: '🤖 Assistant IA (Débogage & suggestions)', value: 'assist' },
       { name: 'Diagnostic', value: 'doctor' },
       { name: 'Aide', value: 'help' },
       { name: '← Retour au menu principal', value: 'back' },
@@ -111,6 +113,12 @@ async function runMoreMenu(): Promise<void> {
   } else if (action === 'chat') {
     const { runLocalChatMode } = await import('./attitudes/chat-local');
     await runLocalChatMode();
+  } else if (action === 'watch') {
+    const { runWatchCommand } = await import('./commands/watch-cmd');
+    await runWatchCommand(process.cwd());
+  } else if (action === 'assist') {
+    const { runAssistCommand } = await import('./commands/assist-cmd');
+    await runAssistCommand(process.cwd());
   } else if (action === 'doctor') {
     const { runDoctor } = await import('./doctor');
     await runDoctor();

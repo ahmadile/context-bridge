@@ -33,14 +33,23 @@ class FileWatcher extends events_1.EventEmitter {
     ];
     constructor(options) {
         super();
-        this.options = {
-            debounceMs: options.debounceMs || 500,
-            ...options,
-        };
+        if (typeof options === 'string') {
+            this.options = {
+                cwd: options,
+                debounceMs: 500,
+            };
+        }
+        else {
+            this.options = {
+                debounceMs: options.debounceMs || 500,
+                ...options,
+            };
+        }
         // Initialize ignore rules
+        const ignoredList = typeof options === 'string' ? [] : (options.ignored || []);
         this.ignoreRules = (0, ignore_1.default)().add([
             ...this.DEFAULT_IGNORED,
-            ...(options.ignored || []),
+            ...ignoredList,
         ]);
     }
     /**

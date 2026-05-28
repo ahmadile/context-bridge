@@ -125,6 +125,8 @@ async function runMoreMenu() {
         choices: [
             { name: 'Tutoriel (transcription vidéo)', value: 'tutoriel' },
             { name: 'Discussion IA (terminal)', value: 'chat' },
+            { name: '🔴 Live Coding (Surveillance en temps réel)', value: 'watch' },
+            { name: '🤖 Assistant IA (Débogage & suggestions)', value: 'assist' },
             { name: 'Diagnostic', value: 'doctor' },
             { name: 'Aide', value: 'help' },
             { name: '← Retour au menu principal', value: 'back' },
@@ -138,6 +140,14 @@ async function runMoreMenu() {
     else if (action === 'chat') {
         const { runLocalChatMode } = await Promise.resolve().then(() => __importStar(require('./attitudes/chat-local')));
         await runLocalChatMode();
+    }
+    else if (action === 'watch') {
+        const { runWatchCommand } = await Promise.resolve().then(() => __importStar(require('./commands/watch-cmd')));
+        await runWatchCommand(process.cwd());
+    }
+    else if (action === 'assist') {
+        const { runAssistCommand } = await Promise.resolve().then(() => __importStar(require('./commands/assist-cmd')));
+        await runAssistCommand(process.cwd());
     }
     else if (action === 'doctor') {
         const { runDoctor } = await Promise.resolve().then(() => __importStar(require('./doctor')));

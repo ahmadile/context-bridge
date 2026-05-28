@@ -34,6 +34,7 @@
     "env-paths": "^4.0.0",
     "figlet": "^1.11.0",
     "ignore": "^7.0.5",
+    "node-llama-cpp": "^3.18.1",
     "openai": "^6.39.0",
     "ora": "^5.4.1",
     "tiktoken": "^1.0.22",
