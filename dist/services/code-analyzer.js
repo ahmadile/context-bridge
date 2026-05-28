@@ -299,5 +299,87 @@ RÈGLES :
             }
         }
     }
+    /**
+     * Chat with AI about code (for assist command)
+     */
+    async chat(message) {
+        const result = await this.analyzeCode(message);
+        let response = result.summary;
+        if (result.suggestions.length > 0) {
+            response += '\n\nSuggestions :\n';
+            for (const sug of result.suggestions) {
+                response += `- ${sug.description}\n`;
+                if (sug.codeSuggestion) {
+                    response += `  \`\`\`\n  ${sug.codeSuggestion}\n  \`\`\`\n`;
+                }
+            }
+        }
+        return response;
+    }
+    /**
+     * Load context from transcript file (for watch command)
+     */
+    async loadContext(transcriptPath) {
+        console.log(chalk_1.default.gray(`  📚 Chargement du contexte depuis : ${transcriptPath}`));
+        if (!fs_1.default.existsSync(transcriptPath)) {
+            console.log(chalk_1.default.yellow(`  ⚠ Fichier de transcription non trouvé : ${transcriptPath}`));
+            return;
+        }
+        const content = fs_1.default.readFileSync(transcriptPath, 'utf8');
+        console.log(chalk_1.default.green(`  ✓ Contexte chargé (${content.length} caractères)`));
+    }
+    /**
+     * Analyze code changes (for watch command)
+     */
+    async analyzeChange(filePath, changes) {
+        console.log(chalk_1.default.gray('  🔍 Analyse du changement...'));
+        const systemPrompt = `Tu es un expert en revue de code en temps réel.
+Ta tâche est d'analyser les changements de code et de fournir des suggestions immédiates.
+
+RÈGLES :
+1. Sois concis et direct
+2. Identifie les problèmes potentiels immédiatement
+3. Propose des corrections si nécessaire
+4. Réponds TOUJOURS en français
+
+Format de réponse attendu (JSON strict) :
+{
+  "explanation": "Explication brève du changement et des problèmes potentiels",
+  "code": "// suggestion de code optionnelle"
+}`;
+        const userPrompt = `Fichier modifié : ${filePath}
+Type de changement : ${changes.type}
+${changes.line ? `Ligne : ${changes.line}` : ''}
+${changes.content ? `Contenu : ${changes.content}` : ''}
+
+Analyse ce changement et fournis tes recommandations.`;
+        let response;
+        if (this.useLocalAI) {
+            response = await ai_engine_1.AIEngine.askLocalModel(systemPrompt, userPrompt);
+        }
+        else if (this.openAI) {
+            this.openAI.setSystemPrompt(systemPrompt);
+            response = await this.openAI.chat(userPrompt);
+        }
+        else {
+            return {
+                explanation: `Changement détecté : ${changes.type} dans ${filePath}`,
+                code: '// IA non disponible pour analyse détaillée'
+            };
+        }
+        // Parse JSON response
+        try {
+            const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || response.match(/\{[\s\S]*\}/);
+            const jsonStr = jsonMatch ? jsonMatch[1] || jsonMatch[0] : response;
+            const result = JSON.parse(jsonStr.trim());
+            return result;
+        }
+        catch (error) {
+            return {
+                explanation: response,
+                code: '// Aucune suggestion de code spécifique'
+            };
+        }
+    }
 }
 exports.CodeAnalyzer = CodeAnalyzer;

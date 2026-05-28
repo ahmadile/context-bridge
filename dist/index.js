@@ -55,6 +55,8 @@ const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const tutoriel_1 = require("./attitudes/tutoriel");
 const version_1 = require("./version");
+const watch_cmd_1 = require("./commands/watch-cmd");
+const assist_cmd_1 = require("./commands/assist-cmd");
 const program = new commander_1.Command();
 program
     .name('code-caricature')
@@ -350,6 +352,8 @@ program
     (0, ui_1.showBanner)();
     (0, ui_1.showHelp)();
 });
+program.addCommand(watch_cmd_1.watchCommand);
+program.addCommand(assist_cmd_1.assistCommand);
 // ─── MODE INTERACTIF (par défaut) ───────────────────────────────────
 const userArgs = process.argv.slice(2).filter((a) => a.length > 0);
 if (userArgs.length === 0) {
