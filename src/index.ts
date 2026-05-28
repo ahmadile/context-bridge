@@ -13,7 +13,8 @@ import fs from 'fs';
 import path from 'path';
 import { runTutorielAttitude } from './attitudes/tutoriel';
 import { getPackageVersion } from './version';
-
+import { watchCommand } from './commands/watch-cmd';
+import { assistCommand } from './commands/assist-cmd';
 const program = new Command();
 
 program
@@ -331,9 +332,11 @@ program
         showHelp();
     });
 
+    program.addCommand(watchCommand);
+program.addCommand(assistCommand);
 // ─── MODE INTERACTIF (par défaut) ───────────────────────────────────
-
 const userArgs = process.argv.slice(2).filter((a) => a.length > 0);
+
 if (userArgs.length === 0) {
     runInteractiveMode().catch((err) => {
         console.error(err);
